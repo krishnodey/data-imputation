@@ -1,3 +1,6 @@
+import random
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -59,8 +62,21 @@ def sample_hint_matrix(m, p_hint):
     return hint_mask * m + 0.5 * (1 - hint_mask)
 
 
-def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr=0.001):
+def set_random_seed(seed=42):
+    """Set random seeds for reproducible GAIN training."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr=0.001, seed=42):
     #Train GAIN generator and discriminator models.
+    set_random_seed(seed)
     data_tensor = torch.tensor(data, dtype=torch.float32)
     mask_tensor = torch.tensor(mask, dtype=torch.float32)
     
