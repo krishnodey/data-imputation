@@ -53,9 +53,9 @@ def median_imputation(data, mask, categorical_columns=()):
 
 
 #methods for imputation: GAIN
-def gain_imputation(data, mask, epochs=200, batch_size=32, alpha=100, lr=1e-3, seed=42):
+def gain_imputation(data, mask, epochs=200, batch_size=32, alpha=100, lr=1e-3):
     """Train GAIN and return the imputed scaled data."""
-    generator = train_gain(data, mask, epochs=epochs, batch_size=batch_size, alpha=alpha, lr=lr, seed=seed)
+    generator = train_gain(data, mask, epochs=epochs, batch_size=batch_size, alpha=alpha, lr=lr)
     imputed_scaled = run_imputation_pipeline(generator, data, mask)
     return imputed_scaled
 
@@ -73,7 +73,7 @@ def save_imputed_file(dataset_name, method, raw_df, mask, imputed_data, output_d
     return output_path
 
 #Run and score one imputation method for one dataset
-def evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir, epochs=200, batch_size=32, alpha=100, lr=1e-3, seed=42):
+def evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir, epochs=200, batch_size=32, alpha=100, lr=1e-3):
     prepared = prepare_dataset_pair(incomplete_path, original_path)
     incomplete_data = prepared.incomplete_data
     mask = prepared.mask
@@ -82,7 +82,7 @@ def evaluate_single_method(dataset_name, incomplete_path, original_path, method,
     start = time.perf_counter()
 
     if method == "GAIN":
-        imputed_scaled = gain_imputation(incomplete_data, mask, epochs=epochs, batch_size=batch_size, alpha=alpha, lr=lr, seed=seed)
+        imputed_scaled = gain_imputation(incomplete_data, mask, epochs=epochs, batch_size=batch_size, alpha=alpha, lr=lr)
     elif method == "Mean":
         imputed_scaled = mean_imputation(incomplete_data, mask, categorical_columns)
     elif method == "Median":
@@ -228,7 +228,7 @@ def generate_comparison_charts(df, output_dir):
     return chart_paths
 
 #Comaprison of the performance of GAIN, Mean, Median methods
-def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", dataset_names=None, start_index=None, end_index=None, output_path="comparison_results.xlsx", methods=None, seed=42):
+def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", dataset_names=None, start_index=None, end_index=None, output_path="comparison_results.xlsx", methods=None):
     """Compare selected imputation methods across selected datasets."""
     selected_names = build_dataset_list(results_xlsx_path, dataset_names, start_index, end_index)
     selected_methods = METHODS if methods is None else [
@@ -267,7 +267,7 @@ def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="dat
             else:
                 eta = "pending (first method)"
             print(f"\nProgress: [{completed_methods}/{total_methods}] | Method {method_position}/{len(selected_methods)}: {method} | ETA: {eta}", flush=True)
-            result = evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir=output_dir, seed=seed)
+            result = evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir=output_dir)
             rows.append(result)
             method_times.append(result["Runtime_s"])
             completed_methods = len(method_times)
@@ -298,7 +298,6 @@ if __name__ == "__main__":
     parser.add_argument("--end", type=int, help="End row index from Table-NRMS-AE.xlsx")
     parser.add_argument("--output", type=str, default="comparison_results.xlsx", help="Output Excel path")
     parser.add_argument("--methods", type=str, help="Comma-separated methods: GAIN, Mean, Median")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for GAIN")
     args = parser.parse_args()
 
     selected = None
@@ -318,5 +317,4 @@ if __name__ == "__main__":
         end_index=args.end,
         output_path=args.output,
         methods=methods,
-        seed=args.seed,
     )

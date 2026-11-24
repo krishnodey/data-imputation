@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+RANDOM_SEED = 42
+
 class Generator(nn.Module):
     #Generate completed samples while preserving observed values.
     def __init__(self, data_dim, hidden_dim):
@@ -62,21 +64,21 @@ def sample_hint_matrix(m, p_hint):
     return hint_mask * m + 0.5 * (1 - hint_mask)
 
 
-def set_random_seed(seed=42):
+def set_random_seed():
     """Set random seeds for reproducible GAIN training."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    random.seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    torch.manual_seed(RANDOM_SEED)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        torch.cuda.manual_seed(RANDOM_SEED)
+        torch.cuda.manual_seed_all(RANDOM_SEED)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
 
-def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr=0.001, seed=42):
+def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr=0.001):
     #Train GAIN generator and discriminator models.
-    set_random_seed(seed)
+    set_random_seed()
     data_tensor = torch.tensor(data, dtype=torch.float32)
     mask_tensor = torch.tensor(mask, dtype=torch.float32)
     

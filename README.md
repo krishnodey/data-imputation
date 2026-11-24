@@ -127,13 +127,7 @@ Compare Mean and Median across multiple datasets:
 python3 main.py --compare --datasets 4-gauss_NN_1,4-gauss_NN_10 --methods Mean,Median
 ```
 
-Use a custom random seed for GAIN:
-
-```bash
-python3 main.py --compare --dataset 4-gauss_NN_1 --methods GAIN --seed 123
-```
-
-The default GAIN seed is `42`. Setting the same seed and configuration on separate runs produces the same GAIN metrics and imputed values. Runtime can differ because it measures execution time.
+GAIN uses a hard-coded random seed of `42`. Repeated runs with the same configuration produce the same GAIN metrics and imputed values. Runtime can differ because it measures execution time.
 
 ## Output Files
 

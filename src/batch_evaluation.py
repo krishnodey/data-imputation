@@ -31,7 +31,7 @@ def _progress_bar(current, total, width=30):
     return f"[{bar}] {current}/{total}"
 
 #Run GAIN for selected dataset variants and save scores and imputed files.
-def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", result_dir="./data/results", dataset_names=None, start_index=None, end_index=None, seed=42):
+def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", result_dir="./data/results", dataset_names=None, start_index=None, end_index=None):
     if not os.path.exists(results_xlsx_path):
         print(f"Results table {results_xlsx_path} not found.")
         return
@@ -118,7 +118,7 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
                 mask = prepared.mask
 
                 start_time = time.perf_counter()
-                generator = train_gain(incomplete_data, mask, epochs=200, batch_size=32, seed=seed)
+                generator = train_gain(incomplete_data, mask, epochs=200, batch_size=32)
                 imputed_data_scaled = run_imputation_pipeline(generator, incomplete_data, mask)
                 execution_time = time.perf_counter() - start_time
                 observed_times.append(execution_time)

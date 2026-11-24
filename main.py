@@ -24,7 +24,6 @@ if __name__ == "__main__":
     parser.add_argument("--end", type=int, help="Row index in Table-NRMS-AE.xlsx to stop before")
     parser.add_argument("--compare", action="store_true", help="Compare GAIN against Mean and Median imputation")
     parser.add_argument("--methods", type=str, help="Comma-separated comparison methods: GAIN, Mean, Median")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for GAIN")
     parser.add_argument("--compare-output", type=str, default="comparison_results.xlsx", help="Comparison Excel output path")
     args = parser.parse_args()
 
@@ -51,7 +50,6 @@ if __name__ == "__main__":
             dataset_names=selected_datasets,
             start_index=args.start,
             end_index=args.end,
-            seed=args.seed,
             output_path=args.compare_output,
             methods=methods,
         )
@@ -62,7 +60,6 @@ if __name__ == "__main__":
             dataset_names=selected_datasets,
             start_index=args.start,
             end_index=args.end,
-            seed=args.seed,
         )
     else:
         print(f"Results table {results_path} not found. Nothing to run.")
