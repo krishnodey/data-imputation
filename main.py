@@ -23,6 +23,7 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, help="Row index in Table-NRMS-AE.xlsx to start from")
     parser.add_argument("--end", type=int, help="Row index in Table-NRMS-AE.xlsx to stop before")
     parser.add_argument("--compare", action="store_true", help="Compare GAIN against Mean and Median imputation")
+    parser.add_argument("--methods", type=str, help="Comma-separated comparison methods: GAIN, Mean, Median")
     parser.add_argument("--compare-output", type=str, default="comparison_results.xlsx", help="Comparison Excel output path")
     args = parser.parse_args()
 
@@ -41,12 +42,16 @@ if __name__ == "__main__":
     results_path = "Table-NRMS-AE.xlsx"
     if args.compare:
         print("\n--- Running GAIN vs Mean vs Median comparison ---")
+        methods = None
+        if args.methods:
+            methods = [value.strip() for value in args.methods.split(',') if value.strip()]
         compare_datasets(
             results_xlsx_path=results_path,
             dataset_names=selected_datasets,
             start_index=args.start,
             end_index=args.end,
             output_path=args.compare_output,
+            methods=methods,
         )
     elif os.path.exists(results_path):
         print(f"\n--- Found {results_path}! Starting batch evaluation ---")

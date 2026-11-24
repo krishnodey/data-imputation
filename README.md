@@ -102,10 +102,29 @@ Compare GAIN against mean and median imputation:
 python3 main.py --compare --dataset 4-gauss_NN_1
 ```
 
+Run only mean and median imputation:
+
+```bash
+python3 main.py --compare --dataset 4-gauss_NN_1 --methods Mean,Median
+```
+
+Run only one baseline:
+
+```bash
+python3 main.py --compare --dataset 4-gauss_NN_1 --methods Mean
+python3 main.py --compare --dataset 4-gauss_NN_1 --methods Median
+```
+
 Compare multiple datasets:
 
 ```bash
 python3 main.py --compare --datasets 4-gauss_NN_1,4-gauss_NN_10
+```
+
+Compare Mean and Median across multiple datasets:
+
+```bash
+python3 main.py --compare --datasets 4-gauss_NN_1,4-gauss_NN_10 --methods Mean,Median
 ```
 
 ## Output Files
@@ -120,12 +139,12 @@ The project generates output in `data/results/`.
 
 ### Comparison outputs
 - `comparison_results.xlsx` in the project root
-- `gain_scores.xlsx`
-- `mean_scores.xlsx`
-- `median_scores.xlsx`
+- `gain_scores.xlsx` when GAIN is selected
+- `mean_scores.xlsx` when Mean is selected
+- `median_scores.xlsx` when Median is selected
 - `method_summary.xlsx`
-- `nrms_comparison.png`
-- `ae_comparison.png`
+- `nrms_comparison.png` when NRMS values are available
+- `ae_comparison.png` when AE values are available
 - individual imputed files such as:
   - `4-gauss_NN_1_GAIN_imputed.xlsx`
   - `4-gauss_NN_1_Mean_imputed.xlsx`
@@ -187,6 +206,9 @@ python3 main.py --compare --dataset 4-gauss_NN_1
 
 # multiple datasets
 python3 main.py --compare --datasets 4-gauss_NN_1,4-gauss_NN_10
+
+# mean and median baselines only
+python3 main.py --compare --dataset 4-gauss_NN_1 --methods Mean,Median
 
 # full batch run
 python3 main.py

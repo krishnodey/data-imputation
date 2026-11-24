@@ -52,7 +52,7 @@ def median_imputation(data, mask, categorical_columns=()):
     return arr
 
 
-#methods for imputation: GAIN, Mean, Median
+#methods for imputation: GAIN
 def gain_imputation(data, mask, epochs=200, batch_size=32, alpha=100, lr=1e-3):
     """Train GAIN and return the imputed scaled data."""
     generator = train_gain(data, mask, epochs=epochs, batch_size=batch_size, alpha=alpha, lr=lr)
@@ -72,9 +72,8 @@ def save_imputed_file(dataset_name, method, raw_df, mask, imputed_data, output_d
     df_imputed.to_excel(output_path, index=False, header=False)
     return output_path
 
-
+#Run and score one imputation method for one dataset
 def evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir, epochs=200, batch_size=32, alpha=100, lr=1e-3):
-    """Run and score one imputation method for one dataset."""
     prepared = prepare_dataset_pair(incomplete_path, original_path)
     incomplete_data = prepared.incomplete_data
     mask = prepared.mask
@@ -108,7 +107,7 @@ def evaluate_single_method(dataset_name, incomplete_path, original_path, method,
 
 
 def build_dataset_list(results_xlsx_path="Table-NRMS-AE.xlsx", dataset_names=None, start_index=None, end_index=None):
-    """Select dataset variants from the results workbook and optional filters."""
+    #select dataset variants from the results workbook and optional filters
     if not os.path.exists(results_xlsx_path):
         raise FileNotFoundError(f"Results table {results_xlsx_path} not found.")
 
@@ -138,7 +137,7 @@ def build_dataset_list(results_xlsx_path="Table-NRMS-AE.xlsx", dataset_names=Non
 
 
 def _save_excel_only(df, output_path):
-    """Save a DataFrame as an XLSX file and return the resulting path."""
+    #Save a DataFrame as an XLSX file and return the resulting path
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     if output_path.lower().endswith(".xlsx"):
         df.to_excel(output_path, index=False)
@@ -150,7 +149,7 @@ def _save_excel_only(df, output_path):
 
 
 def _format_seconds(seconds):
-    """Format a runtime in milliseconds, seconds, minutes, or hours."""
+    #Format a runtime in milliseconds, seconds, minutes, or hours.
     if seconds < 1:
         return f"{seconds * 1000:.1f}ms"
     if seconds < 60:
@@ -162,13 +161,13 @@ def _format_seconds(seconds):
 
 
 def _format_metric(value):
-    """Format a metric for progress output."""
+    #Format a metric for progress output.
     return "N/A" if value is None or pd.isna(value) else f"{value:.4f}"
 
-#update the 
-def write_method_score_files(df, output_dir):
-    """Write per-method score files and a combined method summary."""
-    for method in METHODS:
+#Write per-method score files and a combined method summary
+def write_method_score_files(df, output_dir, methods=None):
+    selected_methods = METHODS if methods is None else methods
+    for method in selected_methods:
         subset = df[df["Method"] == method][["Dataset", "NRMS", "AE", "Runtime_s", "Missing_Rate", "Imputed_File"]].copy()
         method_path = os.path.join(output_dir, f"{method.lower()}_scores.xlsx")
         xlsx_path = _save_excel_only(subset, method_path)
@@ -185,7 +184,7 @@ def write_method_score_files(df, output_dir):
 
 
 def generate_comparison_charts(df, output_dir):
-    """Create NRMS and categorical-accuracy comparison charts."""
+    #Create NRMS and categorical-accuracy comparison charts.
     if df.empty:
         return []
 
@@ -228,19 +227,26 @@ def generate_comparison_charts(df, output_dir):
         print(f"Saved charts: {', '.join(chart_paths)}")
     return chart_paths
 
-#if you want to comapre the performance of GAIN, Mean, Median methods
-def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", dataset_names=None, start_index=None, end_index=None, output_path="comparison_results.xlsx"):
-    """Compare GAIN, mean, and median imputation across selected datasets."""
+#Comaprison of the performance of GAIN, Mean, Median methods
+def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", dataset_names=None, start_index=None, end_index=None, output_path="comparison_results.xlsx", methods=None):
+    """Compare selected imputation methods across selected datasets."""
     selected_names = build_dataset_list(results_xlsx_path, dataset_names, start_index, end_index)
+    selected_methods = METHODS if methods is None else [
+        method for method in METHODS
+        if method.lower() in {str(value).strip().lower() for value in methods}
+    ]
+    if not selected_methods:
+        raise ValueError("No supported methods selected. Use GAIN, Mean, or Median.")
+
     output_dir = os.path.dirname(output_path) or "data/results"
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"\n{'=' * 90}\nComparison run for {len(selected_names)} dataset(s)\n{'=' * 90}")
+    print(f"\n{'=' * 90}\nComparison run for {len(selected_names)} dataset(s) using {', '.join(selected_methods)}\n{'=' * 90}")
 
     rows = []
     method_times = []
     total_datasets = len(selected_names)
-    total_methods = total_datasets * len(METHODS)
+    total_methods = total_datasets * len(selected_methods)
     for dataset_position, dataset_name in enumerate(selected_names, start=1):
         print(f"\n{'=' * 90}\nDATASET {dataset_position}/{total_datasets}: {dataset_name}\n{'=' * 90}")
         base_dataset = dataset_name.split('_')[0]
@@ -253,14 +259,14 @@ def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="dat
             print(f"Skipping {dataset_name}: missing files.")
             continue
 
-        for method_position, method in enumerate(METHODS, start=1):
+        for method_position, method in enumerate(selected_methods, start=1):
             completed_methods = len(method_times)
             if method_times:
                 average_method_time = sum(method_times) / len(method_times)
                 eta = _format_seconds(average_method_time * (total_methods - completed_methods))
             else:
                 eta = "pending (first method)"
-            print(f"\nProgress: [{completed_methods}/{total_methods}] | Method {method_position}/{len(METHODS)}: {method} | ETA: {eta}", flush=True)
+            print(f"\nProgress: [{completed_methods}/{total_methods}] | Method {method_position}/{len(selected_methods)}: {method} | ETA: {eta}", flush=True)
             result = evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir=output_dir)
             rows.append(result)
             method_times.append(result["Runtime_s"])
@@ -275,7 +281,7 @@ def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="dat
         return df
 
     xlsx_path = _save_excel_only(df, output_path)
-    write_method_score_files(df, output_dir)
+    write_method_score_files(df, output_dir, selected_methods)
     generate_comparison_charts(df, output_dir)
 
     print(f"\nComparison saved to {xlsx_path}")
@@ -291,6 +297,7 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, help="Start row index from Table-NRMS-AE.xlsx")
     parser.add_argument("--end", type=int, help="End row index from Table-NRMS-AE.xlsx")
     parser.add_argument("--output", type=str, default="comparison_results.xlsx", help="Output Excel path")
+    parser.add_argument("--methods", type=str, help="Comma-separated methods: GAIN, Mean, Median")
     args = parser.parse_args()
 
     selected = None
@@ -299,6 +306,9 @@ if __name__ == "__main__":
     if args.datasets:
         values = [v.strip() for v in args.datasets.split(',') if v.strip()]
         selected = values if selected is None else selected + values
+    methods = None
+    if args.methods:
+        methods = [value.strip() for value in args.methods.split(',') if value.strip()]
 
     compare_datasets(
         results_xlsx_path="Table-NRMS-AE.xlsx",
@@ -306,4 +316,5 @@ if __name__ == "__main__":
         start_index=args.start,
         end_index=args.end,
         output_path=args.output,
+        methods=methods,
     )

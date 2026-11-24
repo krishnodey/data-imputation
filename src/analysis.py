@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
 
-
+#Summarize overall and per-column missing-data patterns
 def analyze_missing_patterns(data, mask, feature_names):
-    """Summarize overall and per-column missing-data patterns."""
     total_cells = mask.size
     missing_cells = total_cells - int(mask.sum())
     missing_percentage = (missing_cells / total_cells) * 100
