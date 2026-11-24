@@ -4,9 +4,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 class Generator(nn.Module):
-    """Generate completed samples while preserving observed values."""
+    #Generate completed samples while preserving observed values.
     def __init__(self, data_dim, hidden_dim):
-        """Initialize the generator network."""
+        #Initialize the generator network.
         super(Generator, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(data_dim * 3, hidden_dim),
@@ -18,15 +18,15 @@ class Generator(nn.Module):
         )
 
     def forward(self, x_bar, m, z):
-        """Generate missing values and combine them with observed values."""
+        #Generate missing values and combine them with observed values.
         inputs = torch.cat([x_bar, m, z], dim=1)
         gen_data = self.net(inputs)
-        # Observed values pass through unchanged; the generator fills only missing entries.
+        #Observed values pass through unchanged; the generator fills only missing entries.
         return m * x_bar + (1 - m) * gen_data
 
 
 class Discriminator(nn.Module):
-    """Predict the observation mask from completed samples and hint data."""
+    #Predict the observation mask from completed samples and hint data.
     def __init__(self, data_dim, hidden_dim):
         """Initialize the discriminator network."""
         super(Discriminator, self).__init__()
@@ -40,18 +40,18 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, x_tilde, h):
-        """Estimate observation probabilities for each data value."""
+        #Estimate observation probabilities for each data value.
         inputs = torch.cat([x_tilde, h], dim=1)
         return self.net(inputs)
 
 
 def sample_z(batch_size, data_dim):
-    """Sample uniform noise for GAIN inputs."""
+    #Sample uniform noise for GAIN inputs.
     return torch.rand(batch_size, data_dim)
 
 
 def sample_hint_matrix(m, p_hint):
-    """Create a hint matrix by partially revealing the observation mask."""
+    #Create a hint matrix by partially revealing the observation mask.
     batch_size, data_dim = m.shape
     u = torch.rand(batch_size, data_dim)
     hint_mask = (u < p_hint).float()
@@ -60,7 +60,7 @@ def sample_hint_matrix(m, p_hint):
 
 
 def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr=0.001):
-    """Train GAIN generator and discriminator models."""
+    #Train GAIN generator and discriminator models.
     data_tensor = torch.tensor(data, dtype=torch.float32)
     mask_tensor = torch.tensor(mask, dtype=torch.float32)
     

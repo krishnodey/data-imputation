@@ -7,8 +7,8 @@ from src.data_loader import prepare_dataset_pair, restore_imputed_data
 from src.gain import train_gain
 from src.evaluation import calculate_imputation_metrics, run_imputation_pipeline
 
+#Format a runtime in a compact readable unit.
 def _format_seconds(seconds):
-    """Format a runtime in a compact readable unit."""
     if seconds is None:
         return "unknown"
     if seconds < 1:
@@ -21,9 +21,8 @@ def _format_seconds(seconds):
     hours = minutes / 60
     return f"{hours:.1f}h"
 
-
+#Build a text progress bar for batch output.
 def _progress_bar(current, total, width=30):
-    """Build a text progress bar for batch output."""
     if total <= 0:
         filled = width
     else:
@@ -31,9 +30,8 @@ def _progress_bar(current, total, width=30):
     bar = "#" * filled + "-" * (width - filled)
     return f"[{bar}] {current}/{total}"
 
-
+#Run GAIN for selected dataset variants and save scores and imputed files.
 def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", result_dir="./data/results", dataset_names=None, start_index=None, end_index=None):
-    """Run GAIN for selected dataset variants and save scores and imputed files."""
     if not os.path.exists(results_xlsx_path):
         print(f"Results table {results_xlsx_path} not found.")
         return

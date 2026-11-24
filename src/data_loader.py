@@ -25,7 +25,7 @@ class PreparedDataset:
 
 
 def _read_dataframe(file_path):
-    """Read a headerless CSV or Excel dataset."""
+    #Read a headerless CSV or Excel dataset.
     if file_path.endswith('.csv'):
         return pd.read_csv(file_path, header=None)
     if file_path.endswith(('.xlsx', '.xls')):
@@ -34,7 +34,7 @@ def _read_dataframe(file_path):
 
 
 def _category_key(value):
-    """Return a stable key for matching original category values."""
+    #Return a stable key for matching original category values.
     if isinstance(value, (int, float, np.integer, np.floating)):
         number = float(value)
         if number.is_integer():
@@ -43,7 +43,7 @@ def _category_key(value):
 
 
 def _is_categorical_column(series, dataset_name, column_idx):
-    """Determine whether a dataset column should be treated as categorical."""
+    #Determine whether a dataset column should be treated as categorical.
     override = FEATURE_TYPE_OVERRIDES.get(dataset_name.lower(), {}).get(column_idx)
     if override is not None:
         return override == "categorical"
@@ -63,7 +63,7 @@ def _is_categorical_column(series, dataset_name, column_idx):
 
 
 def prepare_dataset_pair(incomplete_path, original_path):
-    """Prepare paired data for GAIN using a complete reference schema."""
+    #Prepare paired data for GAIN using a complete reference schema.
     incomplete_df = _read_dataframe(incomplete_path)
     original_df = _read_dataframe(original_path)
     if incomplete_df.shape != original_df.shape:
@@ -72,7 +72,7 @@ def prepare_dataset_pair(incomplete_path, original_path):
         )
 
     dataset_name = Path(original_path).stem.lower()
-    # The mask is preserved in the original matrix orientation for missing-cell evaluation.
+    #The mask is preserved in the original matrix orientation for missing-cell evaluation.
     mask = (~incomplete_df.isna()).to_numpy(dtype=float)
     original_matrix = np.empty(original_df.shape, dtype=float)
     incomplete_matrix = np.empty(incomplete_df.shape, dtype=float)
@@ -87,7 +87,7 @@ def prepare_dataset_pair(incomplete_path, original_path):
         incomplete_column = incomplete_df.iloc[:, column_idx]
         if _is_categorical_column(original_column, dataset_name, column_idx):
             categorical_columns.append(column_idx)
-            # Stable integer codes let GAIN and the baselines operate on categorical columns numerically.
+            #Stable integer codes let GAIN and the baselines operate on categorical columns numerically.
             label_by_key = {}
             for value in original_column:
                 label_by_key.setdefault(_category_key(value), value)
@@ -104,7 +104,7 @@ def prepare_dataset_pair(incomplete_path, original_path):
             incomplete_matrix[:, column_idx] = pd.to_numeric(incomplete_column, errors="raise").to_numpy(dtype=float)
 
     scaler = MinMaxScaler()
-    # Fit only on the complete reference data so missing values never influence scaling.
+    #Fit only on the complete reference data so missing values never influence scaling.
     scaler.fit(original_matrix)
     incomplete_scaled = scaler.transform(incomplete_matrix)
     incomplete_scaled = np.nan_to_num(incomplete_scaled, nan=0.0)
@@ -121,7 +121,7 @@ def prepare_dataset_pair(incomplete_path, original_path):
 
 
 def restore_imputed_data(imputed_scaled, scaler, category_values):
-    """Inverse-scale imputed values and restore categorical labels."""
+    #Inverse-scale imputed values and restore categorical labels.
     restored_numeric = scaler.inverse_transform(np.asarray(imputed_scaled, dtype=float))
     restored = restored_numeric.astype(object)
     for column_idx, labels in category_values.items():
@@ -132,7 +132,7 @@ def restore_imputed_data(imputed_scaled, scaler, category_values):
 
 
 def load_and_preprocess_data(file_path):
-    """Load and scale a headerless CSV or Excel dataset."""
+    #Load and scale a headerless CSV or Excel dataset.
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path, header=None)
     elif file_path.endswith(('.xlsx', '.xls')):
@@ -140,10 +140,10 @@ def load_and_preprocess_data(file_path):
     else:
         raise ValueError("Unsupported file format. Use CSV or Excel.")
 
-    # Create mask before any imputation: 1 if observed, 0 if missing
+    #Create mask before any imputation: 1 if observed, 0 if missing
     mask = (~df.isna()).astype(float).values
 
-    # Encode categorical or object columns positionally by index
+    #Encode categorical or object columns positionally by index
     for col_idx in range(df.shape[1]):
         col_data = df.iloc[:, col_idx]
         if col_data.dtype == 'object' or pd.api.types.is_categorical_dtype(col_data):
@@ -154,10 +154,10 @@ def load_and_preprocess_data(file_path):
                 df.iloc[not_na_mask, col_idx] = transformed.astype(float)
             df.iloc[:, col_idx] = pd.to_numeric(df.iloc[:, col_idx], errors='coerce')
 
-    # Fill missing values with 0 for initial matrix X_bar
+    #Fill missing values with 0 for initial matrix X_bar
     df_filled = df.fillna(0.0)
 
-    # Scale all features to [0, 1] using MinMaxScaler
+    #Scale all features to [0, 1] using MinMaxScaler
     scaler = MinMaxScaler()
     data_scaled = scaler.fit_transform(df_filled.values)
 
