@@ -15,8 +15,9 @@ from src.gain import train_gain
 
 METHODS = ["GAIN", "Mean", "Median"]
 
-
+#methods for imputation: mean
 def mean_imputation(data, mask, categorical_columns=()):
+    """Fill missing values with observed column means or categorical modes."""
     arr = data.copy()
     categorical_columns = set(categorical_columns)
     for col_idx in range(arr.shape[1]):
@@ -24,6 +25,7 @@ def mean_imputation(data, mask, categorical_columns=()):
         if observed.size == 0:
             fill_value = 0.0
         elif col_idx in categorical_columns:
+            # Categorical baselines use the most frequent observed code (the mode).
             values, counts = np.unique(observed, return_counts=True)
             fill_value = float(values[np.argmax(counts)])
         else:
@@ -32,7 +34,9 @@ def mean_imputation(data, mask, categorical_columns=()):
     return arr
 
 
+#methods for imputation: Median
 def median_imputation(data, mask, categorical_columns=()):
+    """Fill missing values with observed column medians or categorical modes."""
     arr = data.copy()
     categorical_columns = set(categorical_columns)
     for col_idx in range(arr.shape[1]):
@@ -48,13 +52,17 @@ def median_imputation(data, mask, categorical_columns=()):
     return arr
 
 
+#methods for imputation: GAIN, Mean, Median
 def gain_imputation(data, mask, epochs=200, batch_size=32, alpha=100, lr=1e-3):
+    """Train GAIN and return the imputed scaled data."""
     generator = train_gain(data, mask, epochs=epochs, batch_size=batch_size, alpha=alpha, lr=lr)
     imputed_scaled = run_imputation_pipeline(generator, data, mask)
     return imputed_scaled
 
 
+#save the imputed data to an Excel file
 def save_imputed_file(dataset_name, method, raw_df, mask, imputed_data, output_dir):
+    """Insert imputed values into the original dataset and save an Excel file."""
     df_imputed = raw_df.copy()
     missing_positions = np.argwhere(mask == 0)
     for row_idx, col_idx in missing_positions:
@@ -66,6 +74,7 @@ def save_imputed_file(dataset_name, method, raw_df, mask, imputed_data, output_d
 
 
 def evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir, epochs=200, batch_size=32, alpha=100, lr=1e-3):
+    """Run and score one imputation method for one dataset."""
     prepared = prepare_dataset_pair(incomplete_path, original_path)
     incomplete_data = prepared.incomplete_data
     mask = prepared.mask
@@ -99,6 +108,7 @@ def evaluate_single_method(dataset_name, incomplete_path, original_path, method,
 
 
 def build_dataset_list(results_xlsx_path="Table-NRMS-AE.xlsx", dataset_names=None, start_index=None, end_index=None):
+    """Select dataset variants from the results workbook and optional filters."""
     if not os.path.exists(results_xlsx_path):
         raise FileNotFoundError(f"Results table {results_xlsx_path} not found.")
 
@@ -128,6 +138,7 @@ def build_dataset_list(results_xlsx_path="Table-NRMS-AE.xlsx", dataset_names=Non
 
 
 def _save_excel_only(df, output_path):
+    """Save a DataFrame as an XLSX file and return the resulting path."""
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     if output_path.lower().endswith(".xlsx"):
         df.to_excel(output_path, index=False)
@@ -139,6 +150,7 @@ def _save_excel_only(df, output_path):
 
 
 def _format_seconds(seconds):
+    """Format a runtime in milliseconds, seconds, minutes, or hours."""
     if seconds < 1:
         return f"{seconds * 1000:.1f}ms"
     if seconds < 60:
@@ -150,10 +162,12 @@ def _format_seconds(seconds):
 
 
 def _format_metric(value):
+    """Format a metric for progress output."""
     return "N/A" if value is None or pd.isna(value) else f"{value:.4f}"
 
-
+#update the 
 def write_method_score_files(df, output_dir):
+    """Write per-method score files and a combined method summary."""
     for method in METHODS:
         subset = df[df["Method"] == method][["Dataset", "NRMS", "AE", "Runtime_s", "Missing_Rate", "Imputed_File"]].copy()
         method_path = os.path.join(output_dir, f"{method.lower()}_scores.xlsx")
@@ -171,6 +185,7 @@ def write_method_score_files(df, output_dir):
 
 
 def generate_comparison_charts(df, output_dir):
+    """Create NRMS and categorical-accuracy comparison charts."""
     if df.empty:
         return []
 
@@ -213,8 +228,9 @@ def generate_comparison_charts(df, output_dir):
         print(f"Saved charts: {', '.join(chart_paths)}")
     return chart_paths
 
-
+#if you want to comapre the performance of GAIN, Mean, Median methods
 def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", dataset_names=None, start_index=None, end_index=None, output_path="comparison_results.xlsx"):
+    """Compare GAIN, mean, and median imputation across selected datasets."""
     selected_names = build_dataset_list(results_xlsx_path, dataset_names, start_index, end_index)
     output_dir = os.path.dirname(output_path) or "data/results"
     os.makedirs(output_dir, exist_ok=True)

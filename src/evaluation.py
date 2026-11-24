@@ -2,9 +2,7 @@ import numpy as np
 import torch
 
 def calculate_nrmse(original_data, imputed_data, mask):
-    """
-    Calculates the instruction-defined normalized Frobenius error for numeric data.
-    """
+    """Calculate normalized numeric error over missing cells."""
     original = np.asarray(original_data, dtype=float)
     estimate = np.asarray(imputed_data, dtype=float)
     missing = np.asarray(mask) == 0
@@ -19,7 +17,7 @@ def calculate_nrmse(original_data, imputed_data, mask):
 
 
 def calculate_imputation_metrics(original_data, imputed_data, mask, categorical_columns):
-    """Return NRMS for missing numeric cells and exact-match accuracy for categorical cells."""
+    """Return NRMS and categorical exact-match accuracy."""
     original = np.asarray(original_data, dtype=object)
     estimate = np.asarray(imputed_data, dtype=object)
     missing = np.asarray(mask) == 0
@@ -31,6 +29,7 @@ def calculate_imputation_metrics(original_data, imputed_data, mask, categorical_
     if numeric_columns:
         numeric_missing = missing[:, numeric_columns]
         if np.any(numeric_missing):
+            # The metric mask includes only missing numeric cells.
             nrms = calculate_nrmse(
                 np.asarray(original[:, numeric_columns], dtype=float),
                 np.asarray(estimate[:, numeric_columns], dtype=float),
@@ -46,8 +45,8 @@ def calculate_imputation_metrics(original_data, imputed_data, mask, categorical_
 
     return {"NRMS": nrms, "AE": ae}
 
-
 def run_imputation_pipeline(generator, incomplete_data, mask):
+    """Generate a completed data matrix with the trained GAIN generator."""
     with torch.no_grad():
         z_test = torch.rand(incomplete_data.shape[0], incomplete_data.shape[1])
         x_bar_tensor = torch.tensor(incomplete_data, dtype=torch.float32)

@@ -8,6 +8,7 @@ from src.gain import train_gain
 from src.evaluation import calculate_imputation_metrics, run_imputation_pipeline
 
 def _format_seconds(seconds):
+    """Format a runtime in a compact readable unit."""
     if seconds is None:
         return "unknown"
     if seconds < 1:
@@ -22,6 +23,7 @@ def _format_seconds(seconds):
 
 
 def _progress_bar(current, total, width=30):
+    """Build a text progress bar for batch output."""
     if total <= 0:
         filled = width
     else:
@@ -31,15 +33,7 @@ def _progress_bar(current, total, width=30):
 
 
 def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="data/incomplete_datasets", original_dir="data/original_datasets", result_dir="./data/results", dataset_names=None, start_index=None, end_index=None):
-    """
-    Automates loading each incomplete dataset variation, running GAIN,
-    calculating numeric NRMS and categorical AE, recording runtime separately,
-    and saving the imputed dataset into the ./result/ folder.
-
-    dataset_names can be a string, list, or tuple and supports either exact names
-    or their base dataset names such as '4-gauss'. If start_index/end_index are
-    provided, only a slice of the table is evaluated.
-    """
+    """Run GAIN for selected dataset variants and save scores and imputed files."""
     if not os.path.exists(results_xlsx_path):
         print(f"Results table {results_xlsx_path} not found.")
         return
@@ -68,6 +62,7 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
             dataset_names = [dataset_names]
         dataset_names = [str(d).strip() for d in dataset_names if str(d).strip()]
         if dataset_names:
+            # Dataset names can identify one variant or all variants of a base dataset.
             selected_indices = []
             for idx, row in df_results.iterrows():
                 dataset_name = row.get("Datasets")
@@ -133,6 +128,7 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
                 imputed_data = restore_imputed_data(
                     imputed_data_scaled, prepared.scaler, prepared.category_values
                 )
+                # Metrics are computed once, from the complete reference and the shared missing mask.
                 metrics = calculate_imputation_metrics(
                     prepared.original_df.to_numpy(dtype=object),
                     imputed_data,

@@ -6,6 +6,7 @@ from src.baseline_comparison import compare_datasets
 
 
 def parse_dataset_list(raw_value):
+    """Convert a comma-separated dataset string or return a normalized list."""
     if raw_value is None:
         return None
     if isinstance(raw_value, str):
@@ -28,6 +29,7 @@ if __name__ == "__main__":
     selected_datasets = parse_dataset_list(args.datasets)
     positional_dataset = args.dataset_name
 
+    # Positional and flag forms are combined so every selected dataset is evaluated once.
     if positional_dataset:
         selected_datasets = [positional_dataset] if selected_datasets is None else selected_datasets + [positional_dataset]
 
