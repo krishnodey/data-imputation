@@ -56,7 +56,7 @@ pip install numpy pandas scikit-learn torch openpyxl matplotlib
 Activate the virtual environment:
 
 ```bash
-cd /Users/classroomservices/Documents/gain_project
+cd /gain_project
 source venv/bin/activate
 ```
 

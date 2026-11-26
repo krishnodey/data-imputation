@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,6 +8,10 @@ from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 
 
 MAX_INTEGER_CATEGORIES = 20
+# Table names whose data files are spelled differently (table name -> file name).
+DATASET_FILE_ALIASES = {
+    "TTTEG": "TTTTEG",
+}
 FEATURE_TYPE_OVERRIDES = {
     "letter": {column_idx: "numeric" for column_idx in range(16)},
 }
@@ -22,6 +27,18 @@ class PreparedDataset:
     incomplete_df: pd.DataFrame
     categorical_columns: tuple
     category_values: dict
+
+
+def resolve_dataset_paths(dataset_name, incomplete_dir, original_dir):
+    #Return the incomplete and original file paths for a dataset variant.
+    base_dataset = dataset_name.split('_')[0]
+    file_base = DATASET_FILE_ALIASES.get(base_dataset, base_dataset)
+    file_name = file_base + dataset_name[len(base_dataset):]
+    incomplete_path = os.path.join(incomplete_dir, file_base, f"{file_name}.xlsx")
+    if not os.path.exists(incomplete_path):
+        incomplete_path = os.path.join(incomplete_dir, f"{file_name}.xlsx")
+    original_path = os.path.join(original_dir, f"{file_base}.xlsx")
+    return incomplete_path, original_path
 
 
 def _read_dataframe(file_path):
@@ -74,7 +91,6 @@ def prepare_dataset_pair(incomplete_path, original_path):
     dataset_name = Path(original_path).stem.lower()
     #The mask is preserved in the original matrix orientation for missing-cell evaluation.
     mask = (~incomplete_df.isna()).to_numpy(dtype=float)
-    original_matrix = np.empty(original_df.shape, dtype=float)
     incomplete_matrix = np.empty(incomplete_df.shape, dtype=float)
     categorical_columns = []
     category_values = {}
@@ -94,18 +110,22 @@ def prepare_dataset_pair(incomplete_path, original_path):
             ordered_keys = sorted(label_by_key)
             code_by_key = {key: code for code, key in enumerate(ordered_keys)}
             category_values[column_idx] = tuple(label_by_key[key] for key in ordered_keys)
-            original_matrix[:, column_idx] = [code_by_key[_category_key(value)] for value in original_column]
             incomplete_matrix[:, column_idx] = [
                 np.nan if pd.isna(value) else code_by_key[_category_key(value)]
                 for value in incomplete_column
             ]
         else:
-            original_matrix[:, column_idx] = pd.to_numeric(original_column, errors="raise").to_numpy(dtype=float)
             incomplete_matrix[:, column_idx] = pd.to_numeric(incomplete_column, errors="raise").to_numpy(dtype=float)
 
+    #Fit on observed values only so hidden values never influence scaling.
+    fit_matrix = incomplete_matrix.copy()
+    for column_idx in np.flatnonzero(np.isnan(fit_matrix).all(axis=0)):
+        #A fully missing column has no observed range: use its category codes, or [0, 1] if numeric.
+        upper = len(category_values[column_idx]) - 1 if column_idx in category_values else 1.0
+        fit_matrix[0, column_idx] = 0.0
+        fit_matrix[-1, column_idx] = upper
     scaler = MinMaxScaler()
-    #Fit only on the complete reference data so missing values never influence scaling.
-    scaler.fit(original_matrix)
+    scaler.fit(fit_matrix)
     incomplete_scaled = scaler.transform(incomplete_matrix)
     incomplete_scaled = np.nan_to_num(incomplete_scaled, nan=0.0)
 

@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 RANDOM_SEED = 42
 
 class Generator(nn.Module):
-    #Generate completed samples while preserving observed values.
+    #Generate raw estimates for every cell, observed and missing.
     def __init__(self, data_dim, hidden_dim):
         #Initialize the generator network.
         super(Generator, self).__init__()
@@ -23,11 +23,11 @@ class Generator(nn.Module):
         )
 
     def forward(self, x_bar, m, z):
-        #Generate missing values and combine them with observed values.
-        inputs = torch.cat([x_bar, m, z], dim=1)
-        gen_data = self.net(inputs)
-        #Observed values pass through unchanged; the generator fills only missing entries.
-        return m * x_bar + (1 - m) * gen_data
+        #Noise is supplied only at missing positions.
+        inputs = torch.cat([x_bar, m, (1 - m) * z], dim=1)
+        #Return the raw output so the reconstruction loss can see observed cells.
+        #Callers combine it with the observed values.
+        return self.net(inputs)
 
 
 class Discriminator(nn.Module):
@@ -60,7 +60,7 @@ def sample_hint_matrix(m, p_hint):
     batch_size, data_dim = m.shape
     u = torch.rand(batch_size, data_dim)
     hint_mask = (u < p_hint).float()
-    # Hint 0.5 for revealed hints to keep the discriminator uncertain about those entries.
+    # Unrevealed entries are set to 0.5 so the discriminator must infer them; the rest reveal the mask.
     return hint_mask * m + 0.5 * (1 - hint_mask)
 
 
@@ -103,10 +103,12 @@ def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr
             z = sample_z(bs, data_dim)
             h = sample_hint_matrix(batch_m, p_hint)
             
-            x_hat = generator(batch_x, batch_m, z)
-            x_tilde = batch_m * batch_x + (1 - batch_m) * x_hat
+            # The generator is fixed during the discriminator step.
+            with torch.no_grad():
+                x_hat = generator(batch_x, batch_m, z)
+                x_tilde = batch_m * batch_x + (1 - batch_m) * x_hat
             
-            d_prob = discriminator(x_tilde.detach(), h)
+            d_prob = discriminator(x_tilde, h)
             # Discriminator loss predicts the observation mask from completed samples.
             d_loss = -torch.mean(
                 batch_m * torch.log(d_prob + 1e-8) + 
@@ -126,8 +128,9 @@ def train_gain(data, mask, epochs=1000, batch_size=64, alpha=100, p_hint=0.9, lr
             
             d_prob = discriminator(x_tilde, h)
             g_loss_adversarial = -torch.mean((1 - batch_m) * torch.log(d_prob + 1e-8))
-            # Reconstruction on observed cells prevents the generator from overwriting known values.
-            g_loss_mse = torch.sum(batch_m * (batch_x - x_hat) ** 2) / torch.sum(batch_m)
+            # Reconstruction trains the raw generator output to match observed cells.
+            # The clamp avoids 0/0 when a batch has no observed values.
+            g_loss_mse = torch.sum(batch_m * (batch_x - x_hat) ** 2) / torch.sum(batch_m).clamp(min=1.0)
             g_loss = g_loss_adversarial + alpha * g_loss_mse
             
             g_optimizer.zero_grad()

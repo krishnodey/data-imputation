@@ -8,9 +8,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from src.data_loader import prepare_dataset_pair, restore_imputed_data
+from src.data_loader import prepare_dataset_pair, resolve_dataset_paths, restore_imputed_data
 from src.evaluation import calculate_imputation_metrics, run_imputation_pipeline
 from src.gain import train_gain
+from src.result_store import upsert_rows
 
 
 METHODS = ["GAIN", "Mean", "Median"]
@@ -136,16 +137,27 @@ def build_dataset_list(results_xlsx_path="Table-NRMS-AE.xlsx", dataset_names=Non
     return selected
 
 
-def _save_excel_only(df, output_path):
-    #Save a DataFrame as an XLSX file and return the resulting path
+def _save_excel_only(df, output_path, key_columns=None):
+    #Save an XLSX file and return its path; with key columns, update only matching rows
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    if output_path.lower().endswith(".xlsx"):
-        df.to_excel(output_path, index=False)
-        return output_path
-
-    xlsx_path = output_path + ".xlsx"
-    df.to_excel(xlsx_path, index=False)
+    xlsx_path = output_path if output_path.lower().endswith(".xlsx") else output_path + ".xlsx"
+    if key_columns:
+        upsert_rows(xlsx_path, df, key_columns)
+    else:
+        df.to_excel(xlsx_path, index=False)
     return xlsx_path
+
+
+def load_method_scores(output_dir):
+    #Combine the saved per-method score files into one table
+    frames = []
+    for method in METHODS:
+        method_path = os.path.join(output_dir, f"{method.lower()}_scores.xlsx")
+        if os.path.exists(method_path):
+            frame = pd.read_excel(method_path)
+            frame.insert(1, "Method", method)
+            frames.append(frame)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def _format_seconds(seconds):
@@ -164,15 +176,32 @@ def _format_metric(value):
     #Format a metric for progress output.
     return "N/A" if value is None or pd.isna(value) else f"{value:.4f}"
 
-#Write per-method score files and a combined method summary
+#Update the per-method score files with the given rows
 def write_method_score_files(df, output_dir, methods=None):
     selected_methods = METHODS if methods is None else methods
     for method in selected_methods:
         subset = df[df["Method"] == method][["Dataset", "NRMS", "AE", "Runtime_s", "Missing_Rate", "Imputed_File"]].copy()
         method_path = os.path.join(output_dir, f"{method.lower()}_scores.xlsx")
-        xlsx_path = _save_excel_only(subset, method_path)
-        print(f"Saved {method} scores: {xlsx_path}")
+        if not subset.empty:
+            _save_excel_only(subset, method_path, ["Dataset"])
 
+#Copy GAIN scores into the main results table, updating only those datasets
+def update_results_table(rows, results_xlsx_path):
+    table_rows = [
+        {"Datasets": row["Dataset"], "NRMS": row["NRMS"], "AE": row["AE"], "Runtime_s": row["Runtime_s"]}
+        for row in rows
+        if row["Method"] == "GAIN"
+    ]
+    if table_rows:
+        upsert_rows(results_xlsx_path, table_rows, ["Datasets"])
+
+
+#Write the average scores per method
+def write_method_summary(output_dir):
+    # The summary covers every saved dataset, not only those in this run.
+    df = load_method_scores(output_dir)
+    if df.empty:
+        return df
     summary = df.groupby("Method")["NRMS"].mean().reset_index().rename(columns={"NRMS": "Mean_NRMS"})
     summary2 = df.groupby("Method")["AE"].mean().reset_index().rename(columns={"AE": "Mean_AE"})
     summary3 = df.groupby("Method")["Runtime_s"].mean().reset_index().rename(columns={"Runtime_s": "Mean_Runtime_s"})
@@ -244,46 +273,64 @@ def compare_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir="dat
     print(f"\n{'=' * 90}\nComparison run for {len(selected_names)} dataset(s) using {', '.join(selected_methods)}\n{'=' * 90}")
 
     rows = []
+    failed_runs = []
     method_times = []
     total_datasets = len(selected_names)
     total_methods = total_datasets * len(selected_methods)
-    for dataset_position, dataset_name in enumerate(selected_names, start=1):
-        print(f"\n{'=' * 90}\nDATASET {dataset_position}/{total_datasets}: {dataset_name}\n{'=' * 90}")
-        base_dataset = dataset_name.split('_')[0]
-        incomplete_path = os.path.join(incomplete_dir, base_dataset, f"{dataset_name}.xlsx")
-        original_path = os.path.join(original_dir, f"{base_dataset}.xlsx")
-        if not os.path.exists(incomplete_path):
-            incomplete_path = os.path.join(incomplete_dir, f"{dataset_name}.xlsx")
+    try:
+        for dataset_position, dataset_name in enumerate(selected_names, start=1):
+            print(f"\n{'=' * 90}\nDATASET {dataset_position}/{total_datasets}: {dataset_name}\n{'=' * 90}")
+            incomplete_path, original_path = resolve_dataset_paths(dataset_name, incomplete_dir, original_dir)
 
-        if not os.path.exists(incomplete_path) or not os.path.exists(original_path):
-            print(f"Skipping {dataset_name}: missing files.")
-            continue
+            if not os.path.exists(incomplete_path) or not os.path.exists(original_path):
+                print(f"Skipping {dataset_name}: missing files.")
+                continue
 
-        for method_position, method in enumerate(selected_methods, start=1):
-            completed_methods = len(method_times)
-            if method_times:
-                average_method_time = sum(method_times) / len(method_times)
+            dataset_rows = []
+            for method_position, method in enumerate(selected_methods, start=1):
+                completed_methods = len(method_times)
+                if method_times:
+                    average_method_time = sum(method_times) / len(method_times)
+                    eta = _format_seconds(average_method_time * (total_methods - completed_methods))
+                else:
+                    eta = "pending (first method)"
+                print(f"\nProgress: [{completed_methods}/{total_methods}] | Method {method_position}/{len(selected_methods)}: {method} | ETA: {eta}", flush=True)
+                try:
+                    result = evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir=output_dir)
+                except Exception as e:
+                    print(f"Error processing {dataset_name} with {method}: {e}", flush=True)
+                    failed_runs.append(f"{dataset_name} ({method})")
+                    continue
+                dataset_rows.append(result)
+                rows.append(result)
+                method_times.append(result["Runtime_s"])
+                completed_methods = len(method_times)
+                average_method_time = sum(method_times) / completed_methods
                 eta = _format_seconds(average_method_time * (total_methods - completed_methods))
-            else:
-                eta = "pending (first method)"
-            print(f"\nProgress: [{completed_methods}/{total_methods}] | Method {method_position}/{len(selected_methods)}: {method} | ETA: {eta}", flush=True)
-            result = evaluate_single_method(dataset_name, incomplete_path, original_path, method, output_dir=output_dir)
-            rows.append(result)
-            method_times.append(result["Runtime_s"])
-            completed_methods = len(method_times)
-            average_method_time = sum(method_times) / completed_methods
-            eta = _format_seconds(average_method_time * (total_methods - completed_methods))
-            print(f"Completed {method} for {dataset_name} | NRMS: {_format_metric(result['NRMS'])} | AE: {_format_metric(result['AE'])} | Runtime: {_format_seconds(result['Runtime_s'])} | Progress: [{completed_methods}/{total_methods}] | ETA: {eta}", flush=True)
+                print(f"Completed {method} for {dataset_name} | NRMS: {_format_metric(result['NRMS'])} | AE: {_format_metric(result['AE'])} | Runtime: {_format_seconds(result['Runtime_s'])} | Progress: [{completed_methods}/{total_methods}] | ETA: {eta}", flush=True)
+
+            # Save after every dataset so an interrupted run keeps its finished results.
+            if dataset_rows:
+                df_dataset = pd.DataFrame(dataset_rows)
+                _save_excel_only(df_dataset, output_path, ["Dataset", "Method"])
+                write_method_score_files(df_dataset, output_dir, selected_methods)
+                update_results_table(dataset_rows, results_xlsx_path)
+    finally:
+        # Refresh the averages even if the run is stopped early.
+        if rows:
+            write_method_summary(output_dir)
+
+    if failed_runs:
+        print(f"\n{len(failed_runs)} run(s) failed: {', '.join(failed_runs)}")
 
     df = pd.DataFrame(rows)
     if df.empty:
         print("No comparison results generated.")
         return df
 
-    xlsx_path = _save_excel_only(df, output_path)
-    write_method_score_files(df, output_dir, selected_methods)
-    generate_comparison_charts(df, output_dir)
+    generate_comparison_charts(load_method_scores(output_dir), output_dir)
 
+    xlsx_path = output_path if output_path.lower().endswith(".xlsx") else output_path + ".xlsx"
     print(f"\nComparison saved to {xlsx_path}")
     return df
 

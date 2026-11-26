@@ -3,9 +3,10 @@ import time
 import numpy as np
 import pandas as pd
 import torch
-from src.data_loader import prepare_dataset_pair, restore_imputed_data
+from src.data_loader import prepare_dataset_pair, resolve_dataset_paths, restore_imputed_data
 from src.gain import train_gain
 from src.evaluation import calculate_imputation_metrics, run_imputation_pipeline
+from src.result_store import upsert_rows
 
 #Format a runtime in a compact readable unit.
 def _format_seconds(seconds):
@@ -38,10 +39,6 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
 
     os.makedirs(result_dir, exist_ok=True)
     df_results = pd.read_excel(results_xlsx_path)
-    if "Runtime_s" not in df_results.columns:
-        df_results["NRMS"] = np.nan
-        df_results["AE"] = np.nan
-        df_results["Runtime_s"] = np.nan
 
     if start_index is not None:
         start_index = max(0, int(start_index))
@@ -83,6 +80,7 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
     print("=" * 90, flush=True)
 
     observed_times = []
+    pending_rows = []
     total_jobs = len(selected_indices)
     for job_index, idx in enumerate(selected_indices, start=1):
         row = df_results.loc[idx]
@@ -104,12 +102,7 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
             print(f"Progress: {_progress_bar(job_index, total_jobs)}", flush=True)
             print("ETA: pending (first run)", flush=True)
 
-        base_dataset = dataset_name.split('_')[0]
-        incomplete_path = os.path.join(incomplete_dir, base_dataset, f"{dataset_name}.xlsx")
-        original_path = os.path.join(original_dir, f"{base_dataset}.xlsx")
-
-        if not os.path.exists(incomplete_path):
-            incomplete_path = os.path.join(incomplete_dir, f"{dataset_name}.xlsx")
+        incomplete_path, original_path = resolve_dataset_paths(dataset_name, incomplete_dir, original_dir)
 
         if os.path.exists(incomplete_path) and os.path.exists(original_path):
             try:
@@ -134,9 +127,15 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
                     prepared.categorical_columns,
                 )
 
-                df_results.at[idx, "NRMS"] = metrics["NRMS"]
-                df_results.at[idx, "AE"] = metrics["AE"]
-                df_results.at[idx, "Runtime_s"] = execution_time
+                pending_rows.append({
+                    "Datasets": dataset_name,
+                    "NRMS": metrics["NRMS"],
+                    "AE": metrics["AE"],
+                    "Runtime_s": execution_time,
+                })
+                # Save after every dataset, updating only its row. Rows stay pending if a save fails.
+                upsert_rows(results_xlsx_path, pending_rows, ["Datasets"])
+                pending_rows.clear()
                 print(
                     f"Completed {dataset_name} | NRMS: {metrics['NRMS'] if metrics['NRMS'] is not None else 'N/A'}"
                     f" | AE: {metrics['AE'] if metrics['AE'] is not None else 'N/A'}"
@@ -158,7 +157,9 @@ def evaluate_all_datasets(results_xlsx_path="Table-NRMS-AE.xlsx", incomplete_dir
         else:
             print(f"Files not found for {dataset_name}. Skipping...")
 
-    df_results.to_excel(results_xlsx_path, index=False)
+    # Retry any scores that could not be saved earlier.
+    if pending_rows:
+        upsert_rows(results_xlsx_path, pending_rows, ["Datasets"])
 
     if observed_times:
         avg_time = sum(observed_times) / len(observed_times)

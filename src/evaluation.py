@@ -52,5 +52,7 @@ def run_imputation_pipeline(generator, incomplete_data, mask):
         x_bar_tensor = torch.tensor(incomplete_data, dtype=torch.float32)
         mask_tensor = torch.tensor(mask, dtype=torch.float32)
         
-        imputed_tensor = generator(x_bar_tensor, mask_tensor, z_test)
+        generated = generator(x_bar_tensor, mask_tensor, z_test)
+        #Keep observed values and use generated values only for missing cells.
+        imputed_tensor = mask_tensor * x_bar_tensor + (1 - mask_tensor) * generated
         return imputed_tensor.numpy()
